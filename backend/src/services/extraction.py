@@ -1,9 +1,6 @@
-from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import PydanticOutputParser
-from models.schemas import Chunk, DocumentMetadata
-from models.extraction_schema import ShipmentData, ExtractionResponse
-from core.config import settings
+from backend.src.models.schemas import Chunk, DocumentMetadata
+from backend.src.models.extraction_schema import ShipmentData, ExtractionResponse
+from backend.src.core.config import settings
 import logging
 import json
 
@@ -12,6 +9,10 @@ logger = logging.getLogger(__name__)
 class ExtractionService:
     def __init__(self):
         try:
+            from langchain_groq import ChatGroq
+            from langchain_core.output_parsers import PydanticOutputParser
+            from langchain_core.prompts import ChatPromptTemplate
+
             self.llm = ChatGroq(
                 temperature=0,
                 model_name=settings.QA_MODEL,
@@ -178,5 +179,3 @@ Extract as much detail as possible from the document.
         )
         
         return Chunk(text=formatted_text, metadata=metadata)
-
-extraction_service = ExtractionService()

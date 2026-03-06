@@ -64,13 +64,18 @@ Heuristic-based scoring (0.0 to 1.0) based on:
 │   ├── main.py                 # FastAPI Entry point
 │   └── src/
 │       ├── api/routes.py       # API Endpoints (/upload, /ask, /extract)
+│       ├── app.py              # FastAPI app factory
 │       ├── core/config.py      # App configurations
+│       ├── dependencies.py     # Service container / dependency wiring
 │       ├── models/             # Pydantic schemas (QA & Extraction)
+│       ├── use_cases/          # Business orchestration layer
 │       └── services/           # Core Logic
 │           ├── ingestion.py    # Document parsing & chunking
 │           ├── rag.py          # RAG pipeline & Guardrails
 │           ├── extraction.py   # LLM-based structured extraction
 │           └── vector_store.py # FAISS & Embeddings management
+├── tests/
+│   └── unit/                   # Unit tests for orchestration and schemas
 ├── frontend/
 │   └── app.py                  # Streamlit UI
 ├── data/                       # sample test data
@@ -83,6 +88,7 @@ Alternatively, use the `Makefile`:
 make build	    	    #Builds Docker containers using Docker Compose.
 make run-docker	    	#Starts the full application stack using Docker Compose.
 make run-local	    	#Runs the application locally using the run_local.sh script.
+pytest -q               #Runs unit tests
 ```
 
 ---

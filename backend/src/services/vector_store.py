@@ -1,11 +1,6 @@
-import os
 from typing import List, Optional
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_core.retrievers import BaseRetriever
-from models.schemas import Chunk, DocumentMetadata
-from core.config import settings
-from langchain_core.documents import Document
+from backend.src.models.schemas import Chunk, DocumentMetadata
+from backend.src.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,6 +8,8 @@ logger = logging.getLogger(__name__)
 class VectorStoreService:
     def __init__(self):
         try:
+            from langchain_huggingface import HuggingFaceEmbeddings
+
             self.embeddings = HuggingFaceEmbeddings(model_name=settings.EMBEDDING_MODEL)
             logger.info(f"Initialized HuggingFace embeddings with model: {settings.EMBEDDING_MODEL}")
         except Exception as e:
@@ -26,6 +23,9 @@ class VectorStoreService:
         Add chunks to the vector store.
         """
         try:
+            from langchain_community.vectorstores import FAISS
+            from langchain_core.documents import Document
+
             documents = [
                 Document(page_content=chunk.text, metadata=chunk.metadata.model_dump())
                 for chunk in chunks
@@ -42,7 +42,7 @@ class VectorStoreService:
             logger.error(f"Error adding documents to vector store: {str(e)}", exc_info=True)
             raise
 
-    def as_retriever(self, search_type: str = "similarity", search_kwargs: Optional[dict] = None) -> Optional[BaseRetriever]:
+    def as_retriever(self, search_type: str = "similarity", search_kwargs: Optional[dict] = None) -> Optional[object]:
         """
         Return a Retriever interface for the vector store.
         This follows LangChain best practices for RAG chains.
@@ -91,5 +91,3 @@ class VectorStoreService:
         except Exception as e:
             logger.error(f"Error during similarity search: {str(e)}", exc_info=True)
             return []
-
-vector_store_service = VectorStoreService()

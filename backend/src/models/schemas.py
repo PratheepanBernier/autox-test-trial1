@@ -1,6 +1,6 @@
+from typing import Dict, List, Optional
+
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-from datetime import datetime
 
 class DocumentMetadata(BaseModel):
     filename: str
@@ -15,7 +15,7 @@ class Chunk(BaseModel):
 
 class QAQuery(BaseModel):
     question: str
-    chat_history: List[Dict[str, str]] = []
+    chat_history: List[Dict[str, str]] = Field(default_factory=list)
 
 class SourcedAnswer(BaseModel):
     answer: str
@@ -24,3 +24,17 @@ class SourcedAnswer(BaseModel):
 
 class ExtractionRequest(BaseModel):
     document_text: str
+
+
+class UploadExtractionSummary(BaseModel):
+    filename: str
+    text_chunks: int
+    structured_data_extracted: bool
+    reference_id: Optional[str] = None
+    error: Optional[str] = None
+
+
+class UploadResponse(BaseModel):
+    message: str
+    errors: List[str]
+    extractions: List[UploadExtractionSummary]

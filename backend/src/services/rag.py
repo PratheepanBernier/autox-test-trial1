@@ -1,15 +1,9 @@
 from typing import List, Optional
 import logging
 
-from langchain_groq import ChatGroq
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough, RunnableParallel
-from langchain_core.documents import Document
-
-from models.schemas import QAQuery, SourcedAnswer, Chunk, DocumentMetadata
-from services.vector_store import vector_store_service
-from core.config import settings
+from backend.src.models.schemas import QAQuery, SourcedAnswer, Chunk, DocumentMetadata
+from backend.src.services.vector_store import VectorStoreService
+from backend.src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +11,7 @@ logger = logging.getLogger(__name__)
 # -----------------------------
 # Context Formatter
 # -----------------------------
-def format_docs(docs: List[Document]) -> str:
+def format_docs(docs: List[object]) -> str:
     """
     Format retrieved documents with metadata for stronger grounding.
     """
@@ -45,7 +39,15 @@ def format_docs(docs: List[Document]) -> str:
 # RAG Service
 # -----------------------------
 class RAGService:
-    def __init__(self):
+    def __init__(self, vector_store_service: VectorStoreService):
+        from langchain_core.output_parsers import StrOutputParser
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+        from langchain_groq import ChatGroq
+
+        self._vector_store_service = vector_store_service
+        self._runnable_parallel = RunnableParallel
+        self._runnable_passthrough = RunnablePassthrough
         # Deterministic LLM for enterprise RAG
         self.llm = ChatGroq(
             temperature=0,
@@ -109,7 +111,7 @@ FINAL ANSWER (With proper english sentence matching the question):
     # -----------------------------
     # Confidence Scoring
     # -----------------------------
-    def _calculate_confidence(self, answer: str, retrieved_docs: List[Document]) -> float:
+    def _calculate_confidence(self, answer: str, retrieved_docs: List[object]) -> float:
         if not answer:
             return 0.0
 
@@ -144,7 +146,7 @@ FINAL ANSWER (With proper english sentence matching the question):
             )
 
         # 2. Retriever (MMR for diversity)
-        retriever = vector_store_service.as_retriever(
+        retriever = self._vector_store_service.as_retriever(
             search_type="mmr",
             search_kwargs={
                 "k": settings.TOP_K,
@@ -175,10 +177,10 @@ FINAL ANSWER (With proper english sentence matching the question):
 
             # 4. Build LCEL RAG Chain
             rag_chain = (
-                RunnableParallel(
+                self._runnable_parallel(
                     {
                         "context": retriever | format_docs,
-                        "question": RunnablePassthrough()
+                        "question": self._runnable_passthrough()
                     }
                 )
                 | self.prompt
@@ -216,7 +218,3 @@ FINAL ANSWER (With proper english sentence matching the question):
                 confidence_score=0.0,
                 sources=[]
             )
-
-
-# Singleton instance
-rag_service = RAGService()

@@ -1,95 +1,53 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from typing import List
-from services.ingestion import ingestion_service
-from services.vector_store import vector_store_service
-from services.rag import rag_service
-from services.extraction import extraction_service
-from models.schemas import QAQuery, SourcedAnswer
-from models.extraction_schema import ExtractionResponse, ShipmentData
 import logging
+from typing import List
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+
+from backend.src.dependencies import ServiceContainer, get_container
+from backend.src.models.extraction_schema import ExtractionResponse, ShipmentData
+from backend.src.models.schemas import QAQuery, SourcedAnswer, UploadResponse, UploadExtractionSummary
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-@router.post("/upload", response_model=dict)
-async def upload_document(files: List[UploadFile] = File(...)):
+@router.post("/upload", response_model=UploadResponse)
+async def upload_document(
+    files: List[UploadFile] = File(...),
+    container: ServiceContainer = Depends(get_container),
+):
     """
     Upload one or more documents.
     Automatically extracts structured data and stores both text chunks and structured data in vector DB.
     """
-    logger.info(f"Received upload request for {len(files)} files.")
-    processed_count = 0
-    errors = []
-    extractions = []
-    
-    for file in files:
-        try:
-            logger.info(f"Processing file: {file.filename}")
-            content = await file.read()
-            
-            # Step 1: Process file into semantic text chunks
-            chunks = ingestion_service.process_file(content, file.filename)
-            if not chunks:
-                msg = f"No text extracted from {file.filename}"
-                logger.warning(msg)
-                errors.append(msg)
-                continue
-            
-            # Step 2: Store text chunks in vector DB
-            vector_store_service.add_documents(chunks)
-            logger.info(f"Stored {len(chunks)} text chunks from {file.filename}")
-            
-            # Step 3: Auto-extract structured data
-            try:
-                full_text = "\n".join([c.text for c in chunks])
-                logger.info(f"Auto-extracting structured data from {file.filename}...")
-                
-                extraction_result = extraction_service.extract_data(full_text, file.filename)
-                
-                # Step 4: Create structured data chunk and store in vector DB
-                structured_chunk = extraction_service.create_structured_chunk(extraction_result, file.filename)
-                vector_store_service.add_documents([structured_chunk])
-                logger.info(f"Stored structured data chunk for {file.filename}")
-                
-                # Track extraction for response
-                extractions.append({
-                    "filename": file.filename,
-                    "text_chunks": len(chunks),
-                    "structured_data_extracted": True,
-                    "reference_id": extraction_result.data.reference_id
-                })
-            except Exception as extraction_error:
-                logger.error(f"Extraction failed for {file.filename}: {str(extraction_error)}", exc_info=True)
-                extractions.append({
-                    "filename": file.filename,
-                    "text_chunks": len(chunks),
-                    "structured_data_extracted": False,
-                    "error": str(extraction_error)
-                })
-            
-            processed_count += 1
-            logger.info(f"Successfully processed {file.filename}: {len(chunks)} text chunks")
-            
-        except Exception as e:
-            msg = f"Error processing {file.filename}: {str(e)}"
-            logger.error(msg, exc_info=True)
-            errors.append(msg)
-            
-    return {
-        "message": f"Successfully processed {processed_count} documents.",
-        "errors": errors,
-        "extractions": extractions
-    }
+    logger.info("Received upload request for %d files", len(files))
+    result = await container.document_pipeline_service.process_uploads(files)
+    return UploadResponse(
+        message=result.message,
+        errors=result.errors,
+        extractions=[
+            UploadExtractionSummary(
+                filename=summary.filename,
+                text_chunks=summary.text_chunks,
+                structured_data_extracted=summary.structured_data_extracted,
+                reference_id=summary.reference_id,
+                error=summary.error,
+            )
+            for summary in result.extractions
+        ],
+    )
 
 @router.post("/ask", response_model=SourcedAnswer)
-async def ask_question(query: QAQuery):
+async def ask_question(
+    query: QAQuery,
+    container: ServiceContainer = Depends(get_container),
+):
     """
     Ask a question about the uploaded documents.
     """
     logger.info(f"Received question: {query.question}")
     try:
-        response = rag_service.answer_question(query)
+        response = container.rag_service.answer_question(query)
         logger.info(f"Answer generated with confidence {response.confidence_score}")
         return response
     except Exception as e:
@@ -97,7 +55,10 @@ async def ask_question(query: QAQuery):
         raise HTTPException(status_code=500, detail="Internal server error processing question.")
 
 @router.post("/extract", response_model=ExtractionResponse)
-async def extract_data(file: UploadFile = File(...)):
+async def extract_data(
+    file: UploadFile = File(...),
+    container: ServiceContainer = Depends(get_container),
+):
     """
     Extract structured shipment data from a document.
     """
@@ -105,7 +66,7 @@ async def extract_data(file: UploadFile = File(...)):
     try:
         content = await file.read()
         logger.info(f"Extracting text from {file.filename}...")
-        chunks = ingestion_service.process_file(content, file.filename)
+        chunks = container.ingestion_service.process_file(content, file.filename)
         full_text = "\n".join([c.text for c in chunks])
         
         if not full_text:
@@ -113,7 +74,7 @@ async def extract_data(file: UploadFile = File(...)):
             return ExtractionResponse(data=ShipmentData(), document_id=file.filename)
 
         logger.info(f"Text extracted ({len(full_text)} chars). Proceeding to structured extraction.")
-        result = extraction_service.extract_data(full_text, file.filename)
+        result = container.extraction_service.extract_data(full_text, file.filename)
         logger.info("Extraction completed successfully.")
         return result
         

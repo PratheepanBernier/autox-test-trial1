@@ -2,10 +2,8 @@ import os
 import re
 from typing import List
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from models.schemas import Chunk, DocumentMetadata
-from core.config import settings
-import pymupdf  # PyMuPDF
-import docx
+from backend.src.models.schemas import Chunk, DocumentMetadata
+from backend.src.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -76,6 +74,8 @@ class DocumentIngestionService:
 
     def _extract_text_from_pdf(self, file_content: bytes) -> str:
         """Extract text from PDF bytes with page markers."""
+        import pymupdf  # PyMuPDF
+
         doc = pymupdf.open(stream=file_content, filetype="pdf")
         text = ""
         for i, page in enumerate(doc):
@@ -87,6 +87,8 @@ class DocumentIngestionService:
     def _extract_text_from_docx(self, file_content: bytes) -> str:
         """Extract text from DOCX bytes."""
         from io import BytesIO
+        import docx
+
         doc = docx.Document(BytesIO(file_content))
         text = "\n".join([para.text for para in doc.paragraphs])
         return text
@@ -220,5 +222,3 @@ class DocumentIngestionService:
         chunk_text = re.sub(r'^### Page \d+\s*$', '', chunk_text, flags=re.MULTILINE)
         
         return chunk_text.strip()
-
-ingestion_service = DocumentIngestionService()
